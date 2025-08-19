@@ -1,0 +1,34 @@
+When ChatGPT first burst on the scene in early 2023, with its ability to give seemingly intelligent answers and write seemingly perfect code, I have to admit I was worried.
+
+I thought I’d become obsolete.
+
+I thought our entire industry would be handed over to AI and I’d have to switch careers.
+
+That’s not exactly what happened but things have definitely changed.
+
+This issue of Data Patterns is sponsored by Sheet Army Knife, a privacy-first Chrome extension that cleans, formats, and anonymizes PII data in spreadsheets before you accidentally load it to an AI tool. It runs entirely on your machine to reduce privacy risks when using AI tools.
+
+Two years later, with AI hype at an all time high, one thing is clear to me.
+
+Data and analytics engineering work is not going anywhere!
+
+Instead, what’s happening is that data roles are becoming more multi-faceted. Data analysts are doing data science; data scientists are doing data engineering; data engineers are doing software engineering.
+
+As a self-procliamed data generalist (I’ve done analytics, data engineering and even some data science) this was more than welcome, but what I didn’t expect was for me to get into software engineering this late in my career.
+
+While my background is in computer science, I never wanted to get into software engineering, so when my manager asked me dive into Python I was a little concerned. I had never written a single line of Python in my life 😁!
+
+Copilot to the rescue!
+
+Once I realized I could use GenAI / LLMs to help me write the code, I noticed something very interesting. Not knowing how to write Python from scratch didn’t hinder me. As long as I could read AI-generated code and understand what it was doing I was fine!
+
+The key skill for me shifted from writing code to writing very clear design docs; and to write very clear design docs, you need to be REALLY good at system design and architecture.
+
+I soon realized data system design was a skill that wasn’t going anywhere. In fact, many of the solutions I’ve built even required embedding LLM capabilities into software.
+
+Sure you can build apps with a single prompt nowadays, but are these apps easy to maintain, debug, update or are they a bunch of AI “slopware?”
+
+
+Companies are learning that there’s no such thing as a free lunch.
+
+Just when they thought they could replace software and data engineers with AI agents, they are waking to the reality that putting AI generated code in production (without human verification) is a nightmare waiting to happen; especially when that system needs to be well-designed to be maintainable.
