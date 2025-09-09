@@ -1,37 +1,77 @@
 import streamlit as st
-import PyPDF2
-import io
 import os
+import tempfile
+import time
 from typing import List
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
-from langchain.schema import Document
 from langchain.prompts import PromptTemplate
+import pickle
+from pathlib import Path
 
 # Streamlit 페이지 설정
 st.set_page_config(
-    page_title="RAG AI-Agent",
-    page_icon="🤖",
+    page_title="RAG AI-Agent (Optimized)",
+    page_icon="⚡",
     layout="wide"
 )
 
 # 제목과 설명
-st.title("🤖 RAG AI-Agent")
+st.title("⚡ RAG AI-Agent (최적화 버전)")
 st.markdown("PDF 파일을 업로드하고 내용에 대해 질문해보세요!")
 
-# 사이드바에서 API 키 입력
+# 캐시 디렉토리 설정
+CACHE_DIR = Path(".cache")
+CACHE_DIR.mkdir(exist_ok=True)
+
+# 사이드바에서 API 키 및 설정
 with st.sidebar:
     st.header("설정")
-    openai_api_key = st.text_input(
-        "OpenAI API 키를 입력하세요:",
+    groq_api_key = st.text_input(
+        "Groq API 키를 입력하세요:",
         type="password",
-        help="OpenAI API 키가 필요합니다."
+        help="Groq API 키가 필요합니다."
     )
     
-    if openai_api_key:
-        os.environ["OPENAI_API_KEY"] = openai_api_key
+    st.subheader("성능 설정")
+    chunk_size = st.slider("청크 크기", 500, 2000, 1000, 100)
+    chunk_overlap = st.slider("청크 겹침", 50, 300, 200, 50)
+    k_retrieval = st.slider("검색할 문서 수", 2, 10, 3)
+    
+    # 임베딩 모델 선택
+    embedding_model = st.selectbox(
+        "임베딩 모델 선택",
+        [
+            "sentence-transformers/all-MiniLM-L6-v2",  # 가장 빠름
+            "sentence-transformers/all-mpnet-base-v2",  # 균형
+            "BAAI/bge-small-en-v1.5",  # 작고 빠름
+        ],
+        index=0
+    )
+    
+    # LLM 모델 선택
+    llm_model = st.selectbox(
+        "Groq LLM 모델 선택",
+        [
+            "llama3-8b-8192",     # 가장 빠름
+            "llama3-70b-8192",    # 성능 좋음
+            "mixtral-8x7b-32768", # 긴 컨텍스트
+        ],
+        index=0
+    )
+    
+    # 캐시 관리
+    if st.button("캐시 초기화"):
+        for cache_file in CACHE_DIR.glob("*.pkl"):
+            cache_file.unlink()
+        st.success("캐시가 초기화되었습니다!")
+    
+    if groq_api_key:
+        os.environ["GROQ_API_KEY"] = groq_api_key
 
 # 세션 상태 초기화
 if 'vectorstore' not in st.session_state:
@@ -40,122 +80,215 @@ if 'qa_chain' not in st.session_state:
     st.session_state.qa_chain = None
 if 'messages' not in st.session_state:
     st.session_state.messages = []
+if 'embeddings' not in st.session_state:
+    st.session_state.embeddings = None
 
-def extract_text_from_pdf(pdf_file) -> str:
-    """PDF 파일에서 텍스트를 추출합니다."""
+@st.cache_resource
+def load_embeddings(model_name: str):
+    """임베딩 모델을 캐시하여 로드합니다."""
     try:
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_file.read()))
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() + "\n"
-        return text
+        embeddings = HuggingFaceEmbeddings(
+            model_name=model_name,
+            model_kwargs={'device': 'cpu'},  # GPU 사용 시 'cuda'로 변경
+            encode_kwargs={'normalize_embeddings': True}  # 성능 향상
+        )
+        return embeddings
     except Exception as e:
-        st.error(f"PDF 처리 중 오류가 발생했습니다: {str(e)}")
-        return ""
+        st.error(f"임베딩 모델 로딩 오류: {str(e)}")
+        return None
 
-def create_vectorstore(text: str, api_key: str):
-    """텍스트로부터 벡터스토어를 생성합니다."""
+@st.cache_data
+def load_pdf_cached(pdf_bytes, filename):
+    """PDF 로딩을 캐시합니다."""
+    cache_file = CACHE_DIR / f"{filename}_{hash(pdf_bytes)}.pkl"
+    
+    if cache_file.exists():
+        st.info("캐시된 PDF 문서를 로드합니다...")
+        with open(cache_file, 'rb') as f:
+            return pickle.load(f)
+    
+    # 새로운 PDF 처리
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(pdf_bytes)
+        tmp_file_path = tmp_file.name
+    
     try:
-        # 텍스트 분할
+        loader = PyPDFLoader(tmp_file_path)
+        documents = loader.load()
+        
+        # 캐시 저장
+        with open(cache_file, 'wb') as f:
+            pickle.dump(documents, f)
+        
+        return documents
+    finally:
+        os.unlink(tmp_file_path)
+
+def create_vectorstore_optimized(documents: List, embeddings, chunk_size: int, chunk_overlap: int):
+    """최적화된 벡터스토어 생성"""
+    try:
+        if not documents:
+            return None, 0
+        
+        # 문서 해시로 캐시 키 생성
+        doc_hash = hash(str([doc.page_content for doc in documents]))
+        cache_file = CACHE_DIR / f"vectorstore_{doc_hash}_{chunk_size}_{chunk_overlap}.pkl"
+        
+        if cache_file.exists():
+            st.info("캐시된 벡터스토어를 로드합니다...")
+            with open(cache_file, 'rb') as f:
+                vectorstore = pickle.load(f)
+                return vectorstore, len(documents)
+        
+        # 새로운 벡터스토어 생성
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
             length_function=len
         )
         
-        # Document 객체 생성
-        documents = [Document(page_content=text)]
         texts = text_splitter.split_documents(documents)
         
-        # 임베딩 생성
-        embeddings = OpenAIEmbeddings(openai_api_key=api_key)
+        # 배치 처리로 임베딩 생성 (메모리 효율성)
+        batch_size = 32
+        vectorstore = None
         
-        # FAISS 벡터스토어 생성
-        vectorstore = FAISS.from_documents(texts, embeddings)
+        progress_bar = st.progress(0)
         
-        return vectorstore
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            
+            if vectorstore is None:
+                vectorstore = FAISS.from_documents(batch, embeddings)
+            else:
+                temp_vs = FAISS.from_documents(batch, embeddings)
+                vectorstore.merge_from(temp_vs)
+            
+            progress = (i + batch_size) / len(texts)
+            progress_bar.progress(min(progress, 1.0))
+        
+        progress_bar.empty()
+        
+        # 캐시 저장
+        with open(cache_file, 'wb') as f:
+            pickle.dump(vectorstore, f)
+        
+        return vectorstore, len(texts)
+        
     except Exception as e:
-        st.error(f"벡터스토어 생성 중 오류가 발생했습니다: {str(e)}")
-        return None
+        st.error(f"벡터스토어 생성 중 오류: {str(e)}")
+        return None, 0
 
-def create_qa_chain(vectorstore, api_key: str):
-    """QA 체인을 생성합니다."""
+def create_qa_chain_optimized(vectorstore, api_key: str, model_name: str, k: int):
+    """최적화된 QA 체인 생성"""
     try:
-        # LLM 설정
-        llm = ChatOpenAI(
+        # Groq LLM 설정 (빠른 추론)
+        llm = ChatGroq(
             temperature=0,
-            model_name="gpt-3.5-turbo",
-            openai_api_key=api_key
+            model_name=model_name,
+            groq_api_key=api_key,
+            max_tokens=1024,  # 응답 길이 제한으로 속도 향상
         )
         
-        # 프롬프트 템플릿 설정
-        prompt_template = """다음 문맥을 사용하여 질문에 답하세요. 만약 답을 모르겠다면, 모른다고 말하세요. 답을 지어내지 마세요.
+        # 간단한 프롬프트 (토큰 수 최소화)
+        prompt_template = """Context: {context}
 
-{context}
-
-질문: {question}
-답변:"""
+Question: {question}
+Answer:"""
 
         PROMPT = PromptTemplate(
             template=prompt_template,
             input_variables=["context", "question"]
         )
         
-        # RetrievalQA 체인 생성
+        # 검색기 설정 최적화
+        retriever = vectorstore.as_retriever(
+            search_type="similarity",
+            search_kwargs={
+                "k": k,
+                "fetch_k": k * 2  # 더 나은 결과를 위한 오버페칭
+            }
+        )
+        
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
             chain_type="stuff",
-            retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
+            retriever=retriever,
             chain_type_kwargs={"prompt": PROMPT},
             return_source_documents=True
         )
         
         return qa_chain
     except Exception as e:
-        st.error(f"QA 체인 생성 중 오류가 발생했습니다: {str(e)}")
+        st.error(f"QA 체인 생성 중 오류: {str(e)}")
         return None
 
-# 메인 레이아웃을 두 개의 컬럼으로 구성
+# 메인 레이아웃
 col1, col2 = st.columns([1, 2])
 
 with col1:
     st.header("📄 PDF 파일 업로드")
     
-    # PDF 파일 업로드
     uploaded_file = st.file_uploader(
         "PDF 파일을 선택하세요",
         type="pdf",
         help="PDF 파일을 업로드하면 내용을 분석하여 질문에 답할 수 있습니다."
     )
     
-    # PDF 처리
-    if uploaded_file and openai_api_key:
-        with st.spinner("PDF를 처리하고 있습니다..."):
-            # 텍스트 추출
-            text = extract_text_from_pdf(uploaded_file)
-            
-            if text.strip():
-                # 벡터스토어 생성
-                vectorstore = create_vectorstore(text, openai_api_key)
+    if uploaded_file and groq_api_key:
+        # 임베딩 모델 로드
+        if st.session_state.embeddings is None:
+            with st.spinner("임베딩 모델을 로딩하고 있습니다..."):
+                st.session_state.embeddings = load_embeddings(embedding_model)
+        
+        if st.session_state.embeddings:
+            with st.spinner("PDF를 처리하고 있습니다..."):
+                start_time = time.time()
                 
-                if vectorstore:
-                    # QA 체인 생성
-                    qa_chain = create_qa_chain(vectorstore, openai_api_key)
+                # PDF 로드 (캐시됨)
+                pdf_bytes = uploaded_file.read()
+                documents = load_pdf_cached(pdf_bytes, uploaded_file.name)
+                
+                if documents:
+                    # 벡터스토어 생성 (캐시됨)
+                    vectorstore, chunk_count = create_vectorstore_optimized(
+                        documents, 
+                        st.session_state.embeddings, 
+                        chunk_size, 
+                        chunk_overlap
+                    )
                     
-                    if qa_chain:
-                        st.session_state.vectorstore = vectorstore
-                        st.session_state.qa_chain = qa_chain
-                        st.success("✅ PDF 처리가 완료되었습니다!")
+                    if vectorstore:
+                        # QA 체인 생성
+                        qa_chain = create_qa_chain_optimized(
+                            vectorstore, 
+                            groq_api_key, 
+                            llm_model, 
+                            k_retrieval
+                        )
                         
-                        # 문서 정보 표시
-                        st.info(f"📊 문서 정보\n- 파일명: {uploaded_file.name}\n- 텍스트 길이: {len(text):,} 문자")
-            else:
-                st.error("PDF에서 텍스트를 추출할 수 없습니다.")
+                        if qa_chain:
+                            st.session_state.vectorstore = vectorstore
+                            st.session_state.qa_chain = qa_chain
+                            
+                            processing_time = time.time() - start_time
+                            st.success(f"✅ PDF 처리 완료! ({processing_time:.1f}초)")
+                            
+                            # 최적화된 문서 정보
+                            total_text = sum(len(doc.page_content) for doc in documents)
+                            st.info(f"""📊 문서 정보
+- 파일명: {uploaded_file.name}
+- 페이지 수: {len(documents)}
+- 청크 수: {chunk_count}
+- 텍스트: {total_text:,} 문자
+- 처리 시간: {processing_time:.1f}초""")
+                else:
+                    st.error("PDF 로딩 실패")
     
-    elif uploaded_file and not openai_api_key:
-        st.warning("⚠️ OpenAI API 키를 먼저 입력해주세요.")
+    elif uploaded_file and not groq_api_key:
+        st.warning("⚠️ Groq API 키를 먼저 입력해주세요.")
     
-    # 현재 상태 표시
+    # 상태 표시
     if st.session_state.qa_chain:
         st.success("🤖 AI Agent 준비 완료!")
     else:
@@ -165,14 +298,11 @@ with col2:
     st.header("💬 질문 & 답변")
     
     # 채팅 기록 표시
-    chat_container = st.container()
-    
-    with chat_container:
-        for message in st.session_state.messages:
-            if message["role"] == "user":
-                st.chat_message("user").write(message["content"])
-            else:
-                st.chat_message("assistant").write(message["content"])
+    for message in st.session_state.messages:
+        if message["role"] == "user":
+            st.chat_message("user").write(message["content"])
+        else:
+            st.chat_message("assistant").write(message["content"])
     
     # 질문 입력
     if st.session_state.qa_chain:
@@ -183,50 +313,62 @@ with col2:
             
             # AI 응답 생성
             with st.chat_message("assistant"):
-                with st.spinner("답변을 생성하고 있습니다..."):
+                start_time = time.time()
+                
+                with st.spinner("답변 생성 중..."):
                     try:
                         result = st.session_state.qa_chain({"query": prompt})
                         answer = result["result"]
                         
+                        response_time = time.time() - start_time
+                        
                         st.write(answer)
+                        st.caption(f"응답 시간: {response_time:.1f}초")
                         
-                        # 소스 문서 정보 표시 (선택사항)
+                        # 소스 문서 (축약된 정보)
                         if "source_documents" in result and result["source_documents"]:
-                            with st.expander("📚 참고한 문서 부분"):
+                            with st.expander("📚 참고 문서"):
                                 for i, doc in enumerate(result["source_documents"][:2]):
-                                    st.write(f"**참고 {i+1}:**")
-                                    st.write(doc.page_content[:300] + "...")
+                                    page_info = ""
+                                    if hasattr(doc, 'metadata') and 'page' in doc.metadata:
+                                        page_info = f" (p.{doc.metadata['page'] + 1})"
+                                    
+                                    st.write(f"**참고 {i+1}{page_info}:**")
+                                    st.write(doc.page_content[:200] + "...")
                         
-                        # 어시스턴트 메시지 추가
                         st.session_state.messages.append({"role": "assistant", "content": answer})
                         
                     except Exception as e:
-                        error_msg = f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+                        error_msg = f"오류 발생: {str(e)}"
                         st.error(error_msg)
                         st.session_state.messages.append({"role": "assistant", "content": error_msg})
     else:
         st.info("먼저 PDF 파일을 업로드하고 처리해주세요.")
-        
-    # 채팅 기록 초기화 버튼
+    
+    # 채팅 기록 초기화
     if st.session_state.messages:
         if st.button("🗑️ 채팅 기록 지우기"):
             st.session_state.messages = []
             st.rerun()
 
-# 하단 정보
+# 성능 팁
 st.markdown("---")
-st.markdown("""
-### 사용 방법:
-1. 왼쪽 사이드바에서 **OpenAI API 키**를 입력하세요
-2. **PDF 파일**을 업로드하세요
-3. PDF 처리가 완료되면 **질문**을 입력하세요
-4. AI가 PDF 내용을 바탕으로 **답변**을 제공합니다
+with st.expander("⚡ 성능 최적화 팁"):
+    st.markdown("""
+    ### 🚀 속도 향상 방법:
+    1. **임베딩 모델**: `all-MiniLM-L6-v2` 사용 (가장 빠름)
+    2. **LLM 모델**: `llama3-8b-8192` 사용 (Groq에서 가장 빠름)
+    3. **청크 크기**: 큰 값(1500-2000)으로 설정하여 청크 수 감소
+    4. **검색 문서 수**: 2-3개로 제한
+    5. **캐시 활용**: 동일한 PDF는 캐시에서 로드
+    
+    ### 🎯 현재 최적화 적용 사항:
+    - ✅ 임베딩 모델 캐싱 (`@st.cache_resource`)
+    - ✅ PDF 처리 결과 캐싱 (`@st.cache_data`)
+    - ✅ 벡터스토어 디스크 캐싱
+    - ✅ 배치 임베딩 처리
+    - ✅ Groq 빠른 추론 모델 사용
+    - ✅ 응답 토큰 수 제한
+    """)
 
-### 필요한 라이브러리:
-```bash
-pip install streamlit langchain langchain-community langchain-openai faiss-cpu PyPDF2 openai
-```
-""")
-
-# 실행 명령어 안내
 st.code("streamlit run app.py", language="bash")
