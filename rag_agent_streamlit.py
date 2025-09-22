@@ -411,16 +411,18 @@ with col2:
                         error_msg = str(e)
                         
                         # Provider별 API 에러 메시지 개선
-                        if "Error code: 401" in error_msg and "Invalid API Key" in error_msg:
-                            error_display = f"❌ **API 키 오류**: {provider} API 키가 무효합니다. 사이드바에서 올바른 API 키를 입력해주세요."
+                        if "Error code: 401" in error_msg or "authentication_error" in error_msg or "invalid x-api-key" in error_msg:
+                            error_display = f"🔑 **API 키 인증 실패**: {provider} API 키가 올바르지 않습니다. 사이드바에서 정확한 API 키를 다시 입력해주세요."
                         elif "Error code: 429" in error_msg:
-                            error_display = f"❌ **사용량 한도 초과**: {provider} API 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+                            error_display = f"⏰ **사용량 한도 초과**: {provider} API 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
                         elif "Error code: 500" in error_msg:
-                            error_display = f"❌ **서버 오류**: {provider} 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해주세요."
-                        elif "anthropic" in error_msg.lower() and "api_key" in error_msg.lower():
-                            error_display = f"❌ **API 키 오류**: {provider} API 키가 무효합니다. 사이드바에서 올바른 API 키를 입력해주세요."
-                        elif "openai" in error_msg.lower() and "api_key" in error_msg.lower():
-                            error_display = f"❌ **API 키 오류**: {provider} API 키가 무효합니다. 사이드바에서 올바른 API 키를 입력해주세요."
+                            error_display = f"🔧 **서버 오류**: {provider} 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해주세요."
+                        elif "anthropic" in error_msg.lower() and ("api_key" in error_msg.lower() or "authentication" in error_msg.lower()):
+                            error_display = f"🔑 **API 키 인증 실패**: {provider} API 키가 올바르지 않습니다. 사이드바에서 정확한 API 키를 다시 입력해주세요."
+                        elif "openai" in error_msg.lower() and ("api_key" in error_msg.lower() or "authentication" in error_msg.lower()):
+                            error_display = f"🔑 **API 키 인증 실패**: {provider} API 키가 올바르지 않습니다. 사이드바에서 정확한 API 키를 다시 입력해주세요."
+                        elif "groq" in error_msg.lower() and ("api_key" in error_msg.lower() or "authentication" in error_msg.lower()):
+                            error_display = f"🔑 **API 키 인증 실패**: {provider} API 키가 올바르지 않습니다. 사이드바에서 정확한 API 키를 다시 입력해주세요."
                         else:
                             error_display = f"❌ **오류 발생**: {error_msg}"
                         
