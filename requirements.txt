@@ -8,3 +8,8 @@ faiss-cpu
 transformers
 torch
 sentence-transformers
+numpy
+pandas
+matplotlib
+python-dotenv
+pickle5
