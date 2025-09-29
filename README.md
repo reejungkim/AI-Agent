@@ -1,15 +1,16 @@
 # AI Agent - RAG (Retrieval-Augmented Generation) System
 
-A comprehensive RAG implementation using LangChain, featuring document processing, vector search, and intelligent question-answering capabilities.
+A comprehensive RAG implementation using LangChain, featuring document processing, vector search, and intelligent question-answering capabilities with multi-provider support.
 
 ## 🚀 Features
 
 - **Document Processing**: PDF document loading and text chunking
 - **Vector Search**: FAISS-based similarity search with multiple embedding models
+- **Multi-Provider Support**: Groq, Anthropic (Claude), and OpenAI integration
 - **Reranking**: Advanced document reranking using cross-encoders
-- **Multiple LLM Support**: Integration with HuggingFace, Groq, and Ollama
 - **RAG Evaluation**: Comprehensive evaluation using Ragas metrics
 - **Streamlit Interface**: Web-based user interface for easy interaction
+- **Cloud Deployment**: Ready for Streamlit Cloud deployment
 
 ## 📋 Overview
 
@@ -28,6 +29,8 @@ This project implements a complete RAG pipeline with the following components:
 
 ## 🛠️ Installation
 
+### Local Development
+
 1. Clone the repository:
 ```bash
 git clone <repository-url>
@@ -39,21 +42,36 @@ cd AI-Agent
 pip install -r requirements.txt
 ```
 
-3. Set up environment variables:
+3. Set up environment variables (optional for local development):
 Create a `.env` file with the following variables:
 ```env
-# HuggingFace API
-huggingface_read=your_huggingface_token
-
-# Groq API
-groq_api=your_groq_api_key
-
-# LangSmith API (optional)
-LANGSMITH_API_KEY=your_langsmith_key
-
-# Gemini API (optional)
-gemini_llm_api=your_gemini_api_key
+# API Keys (optional - can be entered in the UI)
+GROQ_API_KEY=your_groq_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+OPENAI_API_KEY=your_openai_api_key
 ```
+
+### Streamlit Cloud Deployment
+
+1. **Fork this repository** to your GitHub account
+
+2. **Go to [Streamlit Cloud](https://share.streamlit.io/)**
+
+3. **Deploy your app**:
+   - Connect your GitHub account
+   - Select this repository
+   - Set the main file path to `rag_agent_streamlit.py`
+
+4. **Configure Secrets** in Streamlit Cloud:
+   - Go to your app's settings
+   - Add the following secrets:
+   ```toml
+   groq_api_key = "your_groq_api_key_here"
+   anthropic_api_key = "your_anthropic_api_key_here"
+   openai_api_key = "your_openai_api_key_here"
+   ```
+
+5. **Deploy!** Your app will be available at `https://your-app-name.streamlit.app`
 
 ## 📚 Usage
 
@@ -160,40 +178,39 @@ The system supports multiple embedding models:
 
 Multiple LLM providers are supported:
 
-#### HuggingFace
-```python
-from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
-
-endpoint = HuggingFaceEndpoint(
-    repo_id="deepseek-ai/DeepSeek-V3-0324",
-    max_new_tokens=512,
-    temperature=0.7,
-    huggingfacehub_api_token=os.environ["huggingface_read"],
-    task="conversational"
-)
-llm = ChatHuggingFace(llm=endpoint)
-```
-
-#### Groq
+#### Groq (Fast & Free)
 ```python
 from langchain_groq import ChatGroq
 
 llm = ChatGroq(
-    model="llama-3.1-8b-instant",
-    temperature=0.7,
-    max_tokens=512,
-    groq_api_key=os.environ["groq_api"]
+    model="llama3-8b-8192",  # Fastest
+    temperature=0,
+    max_tokens=1024,
+    groq_api_key=os.environ["GROQ_API_KEY"]
 )
 ```
 
-#### Ollama (Local)
+#### Anthropic (Claude - High Quality)
 ```python
-from langchain_community.chat_models import ChatOllama
+from langchain_anthropic import ChatAnthropic
 
-llm = ChatOllama(
-    model='mistral:latest',
-    format="json",
-    temperature=0
+llm = ChatAnthropic(
+    model="claude-3-5-sonnet-20241022",  # Latest Sonnet
+    temperature=0,
+    max_tokens=1024,
+    api_key=os.environ["ANTHROPIC_API_KEY"]
+)
+```
+
+#### OpenAI (GPT Models)
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model="gpt-4o",  # Latest GPT-4o
+    temperature=0,
+    max_tokens=1024,
+    api_key=os.environ["OPENAI_API_KEY"]
 )
 ```
 
@@ -252,18 +269,28 @@ AI-Agent/
 
 ## 🚀 Quick Start
 
-1. **Run the Jupyter notebook**:
-   ```bash
-   jupyter notebook agent.ipynb
-   ```
+### Local Development
 
-2. **Launch Streamlit app**:
+1. **Launch Streamlit app**:
    ```bash
    streamlit run rag_agent_streamlit.py
    ```
 
-3. **Test with sample document**:
-   The system comes with Amazon's 2024 Annual Report for testing.
+2. **Open your browser** to `http://localhost:8501`
+
+3. **Select AI Provider** and enter your API key
+
+4. **Upload a PDF** and start asking questions!
+
+### Streamlit Cloud Deployment
+
+1. **Fork this repository** on GitHub
+2. **Deploy on [Streamlit Cloud](https://share.streamlit.io/)**
+3. **Configure API keys** in the app settings
+4. **Share your app** with others!
+
+### Test with Sample Document
+The system comes with Amazon's 2024 Annual Report for testing.
 
 ## 🔍 Key Features Explained
 
@@ -281,6 +308,62 @@ AI-Agent/
 - Improves retrieval quality by 15-20%
 - Reduces noise in retrieved contexts
 - Better semantic understanding of query-document relationships
+
+## ☁️ Deployment Guide
+
+### Streamlit Cloud (Recommended)
+
+1. **Prepare your repository**:
+   - Ensure all files are committed to GitHub
+   - Verify `requirements.txt` is up to date
+   - Test locally first
+
+2. **Deploy on Streamlit Cloud**:
+   - Go to [share.streamlit.io](https://share.streamlit.io/)
+   - Sign in with GitHub
+   - Click "New app"
+   - Select your repository and branch
+   - Set main file path to `rag_agent_streamlit.py`
+
+3. **Configure secrets**:
+   - In your app's settings, add these secrets:
+   ```toml
+   groq_api_key = "your_groq_api_key"
+   anthropic_api_key = "your_anthropic_api_key"  
+   openai_api_key = "your_openai_api_key"
+   ```
+
+4. **Advanced settings** (optional):
+   - Python version: 3.8
+   - Memory: 1GB (default)
+   - Timeout: 30 seconds
+
+### Other Deployment Options
+
+#### Heroku
+```bash
+# Add Procfile (already included)
+web: streamlit run rag_agent_streamlit.py --server.port=$PORT --server.address=0.0.0.0
+
+# Deploy
+git add .
+git commit -m "Deploy to Heroku"
+git push heroku main
+```
+
+#### Docker
+```dockerfile
+FROM python:3.8-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+EXPOSE 8501
+
+CMD ["streamlit", "run", "rag_agent_streamlit.py", "--server.port=8501", "--server.address=0.0.0.0"]
+```
 
 ## 🤝 Contributing
 
