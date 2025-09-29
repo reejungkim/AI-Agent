@@ -1,0 +1,487 @@
+# Product Requirements Document: Tech News Aggregator & Insights Platform
+
+## 1. Executive Summary
+
+### 1.1 Product Overview
+A web-based platform that automatically scrapes trending technology and business news from multiple sources, generates AI-powered summaries using HuggingFace models, and provides actionable insights using GPT API, all served through a Flask web application.
+
+### 1.2 Problem Statement
+Professionals struggle to stay updated with the rapidly evolving tech and business landscape due to information overload. They need a centralized platform that curates, summarizes, and contextualizes news efficiently.
+
+### 1.3 Success Metrics
+- Successfully scrape and process 100+ articles daily
+- Generate summaries within 3 seconds per article
+- Achieve 90% user satisfaction with summary quality
+- Daily active users: 500+ within first quarter
+- Average session duration: 5+ minutes
+
+---
+
+## 2. Product Goals & Objectives
+
+### 2.1 Primary Goals
+1. Aggregate trending tech/business news from top-tier sources
+2. Generate accurate, concise summaries using HuggingFace models
+3. Provide contextual insights and analysis via GPT API
+4. Deliver content through an intuitive Flask web interface
+
+### 2.2 Target Audience
+- Technology professionals and engineers
+- Business executives and managers
+- Startup founders and entrepreneurs
+- Investors and analysts
+- Tech-savvy individuals seeking curated news
+
+---
+
+## 3. Functional Requirements
+
+### 3.1 News Scraping Module
+
+#### 3.1.1 Data Sources
+- **Tier 1 Sources** (High Priority):
+  - TechCrunch
+  - The Verge
+  - Hacker News
+  - Bloomberg Technology
+  - Reuters Business
+  - Ars Technica
+
+- **Tier 2 Sources** (Medium Priority):
+  - VentureBeat
+  - Wired
+  - Fast Company
+  - Business Insider Tech
+
+#### 3.1.2 Scraping Requirements
+- **Frequency**: Everyday at 7AM (GMT +9) for trending topics
+- **Data Extraction**:
+  - Article headline
+  - Publication date and time
+  - Author (if available)
+  - Full article text
+  - Source URL
+  - Featured image URL
+  - Category tags
+  - Engagement metrics (views, shares if available)
+
+- **Filtering Criteria**:
+  - Articles published within last 24 hours
+  - Minimum word count: 200 words
+  - Exclude press releases and sponsored content
+  - Language: English and Korean only 
+
+#### 3.1.3 Technical Specifications
+- Use BeautifulSoup4 and Scrapy for web scraping
+- Implement rotating user agents and request delays
+- Error handling for failed requests
+- Respect robots.txt and rate limiting
+- Store raw HTML for backup and analysis
+
+### 3.2 Summarization Module
+
+#### 3.2.1 HuggingFace Model Integration
+- **Primary Model**: facebook/bart-large-cnn
+- **Fallback Model**: google/pegasus-xsum
+- **Model Parameters**:
+  - Max length: 150 tokens
+  - Min length: 50 tokens
+  - Length penalty: 2.0
+  - No repeat n-gram size: 3
+
+#### 3.2.2 Summarization Features
+- **Abstract Summary**: 3-4 sentence overview (80-150 words)
+- **Bullet Points**: 3-5 key takeaways
+- **Reading Time**: Estimated time to read full article
+- **Confidence Score**: Model confidence in summary quality
+
+#### 3.2.3 Processing Pipeline
+1. Clean and preprocess article text
+2. Detect and handle special formatting (code blocks, tables)
+3. Run through HuggingFace model
+4. Post-process output (grammar check, formatting)
+5. Cache results for 24 hours
+
+### 3.3 Insights Generation Module
+
+#### 3.3.1 GPT API Integration
+- **Model**: GPT-4 or GPT-3.5-turbo
+- **Use Cases**:
+  - Market impact analysis
+  - Trend identification
+  - Competitive landscape insights
+  - Future implications
+  - Related topic suggestions
+
+#### 3.3.2 Insight Types
+1. **Market Impact**: Analysis of how news affects markets/industries
+2. **Trend Analysis**: Identification of emerging patterns
+3. **Competitive Intelligence**: Company/product comparisons
+4. **Technical Deep-Dive**: Explanation of technical concepts
+5. **Action Items**: Recommended follow-up actions for readers
+
+#### 3.3.3 Prompt Engineering
+- Context window: Include article summary + metadata
+- Temperature: 0.7 for balanced creativity/accuracy
+- Max tokens: 300 per insight
+- System prompt: Define role as tech/business analyst
+
+### 3.4 Flask Web Application
+
+#### 3.4.1 Architecture
+- **Framework**: Flask 3.x
+- **Template Engine**: Jinja2
+- **Database**: PostgreSQL for production, SQLite for development
+- **Caching**: Redis for session and query caching
+- **Task Queue**: Celery with RabbitMQ for async processing
+
+#### 3.4.2 Core Endpoints
+```
+GET  /                    - Homepage with trending articles
+GET  /article/<id>        - Individual article view
+GET  /category/<name>     - Category-filtered articles
+GET  /search              - Search functionality
+POST /api/scrape          - Trigger manual scrape (admin)
+GET  /api/articles        - RESTful API endpoint
+GET  /trending            - Real-time trending topics
+GET  /insights            - Curated daily insights
+```
+
+#### 3.4.3 User Interface Features
+- **Homepage**:
+  - Grid/list view toggle
+  - Trending topics sidebar
+  - Category filters (AI, Cloud, Crypto, Startups, etc.)
+  - Search bar with autocomplete
+  - Date range selector
+
+- **Article View**:
+  - Original headline and source link
+  - AI-generated summary
+  - Key takeaways (bullet points)
+  - GPT-powered insights section
+  - Related articles
+  - Share buttons (Twitter, LinkedIn, Email)
+  - Save/bookmark functionality
+
+- **Trending Page**:
+  - Real-time trending topics
+  - Topic clusters visualization
+  - Engagement metrics
+  - Time-based trending (last hour, 6 hours, 24 hours)
+
+---
+
+## 4. Non-Functional Requirements
+
+### 4.1 Performance
+- Page load time: < 2 seconds
+- API response time: < 500ms
+- Summarization processing: < 3 seconds per article
+- Concurrent users: Support 1000+ simultaneous connections
+- Database query optimization: < 100ms for most queries
+
+### 4.2 Scalability
+- Horizontal scaling capability for web servers
+- Distributed task processing with Celery
+- Database read replicas for heavy read operations
+- CDN integration for static assets
+- Auto-scaling based on traffic patterns
+
+### 4.3 Reliability
+- System uptime: 99.5% SLA
+- Automated health checks every 60 seconds
+- Graceful degradation (show cached content if services fail)
+- Automated backup every 6 hours
+- Error logging and monitoring (Sentry integration)
+
+### 4.4 Security
+- HTTPS enforcement (TLS 1.3)
+- API rate limiting (100 requests/minute per IP)
+- SQL injection prevention (parameterized queries)
+- XSS protection (Content Security Policy)
+- Environment variable management for API keys
+- User authentication (optional: OAuth 2.0)
+- CORS configuration for API endpoints
+
+### 4.5 Compliance
+- Respect robots.txt and scraping policies
+- Copyright notice for original content
+- GDPR compliance for EU users (if applicable)
+- Attribution to original sources
+- Terms of service and privacy policy
+
+---
+
+## 5. Technical Architecture
+
+### 5.1 System Components
+
+```
+┌─────────────────┐
+│   Web Scraper   │ (Scrapy/BeautifulSoup)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Task Queue     │ (Celery + RabbitMQ)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Summarization  │ (HuggingFace Transformers)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Insights Engine │ (OpenAI GPT API)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   PostgreSQL    │ (Data Storage)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Flask Web App  │ (Presentation Layer)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Redis Cache    │ (Performance Layer)
+└─────────────────┘
+```
+
+### 5.2 Data Models
+
+#### Article Model
+```python
+{
+    "id": "uuid",
+    "title": "string",
+    "url": "string",
+    "source": "string",
+    "author": "string",
+    "published_at": "datetime",
+    "scraped_at": "datetime",
+    "content": "text",
+    "summary": "text",
+    "key_takeaways": ["string"],
+    "insights": "text",
+    "category": "string",
+    "tags": ["string"],
+    "image_url": "string",
+    "reading_time": "integer",
+    "engagement_score": "float"
+}
+```
+
+### 5.3 Technology Stack
+
+**Backend:**
+- Python 3.10+
+- Flask 3.x
+- SQLAlchemy (ORM)
+- Celery (async tasks)
+- RabbitMQ (message broker)
+- Redis (caching)
+
+**ML/AI:**
+- HuggingFace Transformers
+- OpenAI API (GPT-4/3.5-turbo)
+- NLTK/spaCy (text preprocessing)
+
+**Scraping:**
+- Scrapy
+- BeautifulSoup4
+- Requests
+- Selenium (for JavaScript-heavy sites)
+
+**Frontend:**
+- Jinja2 templates
+- HTML5/CSS3
+- JavaScript (vanilla or Alpine.js)
+- Tailwind CSS
+
+**Database:**
+- PostgreSQL 14+
+- Redis 7+
+
+**Deployment:**
+- Docker & Docker Compose
+- Nginx (reverse proxy)
+- Gunicorn (WSGI server)
+- AWS/GCP/DigitalOcean
+
+---
+
+## 6. User Stories
+
+### 6.1 Core User Stories
+
+**US-001**: As a tech professional, I want to see trending tech news on the homepage so I can quickly stay informed.
+
+**US-002**: As a busy executive, I want to read AI-generated summaries instead of full articles to save time.
+
+**US-003**: As an investor, I want insights on market impact so I can make informed decisions.
+
+**US-004**: As a researcher, I want to filter articles by category to focus on my areas of interest.
+
+**US-005**: As a user, I want to search for specific topics to find relevant historical articles.
+
+**US-006**: As a reader, I want to see related articles so I can explore topics in depth.
+
+**US-007**: As a user, I want to bookmark articles to read them later.
+
+**US-008**: As a mobile user, I want a responsive design that works on my phone.
+
+---
+
+## 7. Development Phases
+
+### Phase 1: MVP (Weeks 1-4)
+- Basic web scraping for 3 sources
+- HuggingFace summarization integration
+- Simple Flask web interface
+- PostgreSQL database setup
+- Basic article listing and detail pages
+
+### Phase 2: Enhancement (Weeks 5-8)
+- Add 7 more news sources
+- GPT API integration for insights
+- Category filtering
+- Search functionality
+- Redis caching implementation
+- Celery task queue setup
+
+### Phase 3: Scaling (Weeks 9-12)
+- Performance optimization
+- Advanced filtering and sorting
+- Trending topics algorithm
+- User accounts and bookmarks
+- API endpoint development
+- Mobile responsive design
+
+### Phase 4: Polish (Weeks 13-16)
+- UI/UX improvements
+- Analytics integration
+- Email notifications (optional)
+- Social sharing features
+- Admin dashboard
+- Comprehensive testing and bug fixes
+
+---
+
+## 8. API Keys & Configuration
+
+### 8.1 Required API Keys
+- **OpenAI API Key**: For GPT-based insights
+- **HuggingFace Token**: For model downloads (optional for public models)
+
+### 8.2 Environment Variables
+```
+FLASK_APP=app.py
+FLASK_ENV=production
+SECRET_KEY=<random-secret-key>
+DATABASE_URL=postgresql://user:pass@localhost/dbname
+REDIS_URL=redis://localhost:6379
+OPENAI_API_KEY=<your-openai-key>
+HUGGINGFACE_TOKEN=<your-hf-token>
+CELERY_BROKER_URL=amqp://localhost
+```
+
+---
+
+## 9. Testing Strategy
+
+### 9.1 Unit Tests
+- Scraper functionality (mocked responses)
+- Summarization model output validation
+- GPT API integration (mocked calls)
+- Database CRUD operations
+- Utility functions
+
+### 9.2 Integration Tests
+- End-to-end scraping pipeline
+- Summarization + insights generation
+- API endpoint testing
+- Database transactions
+
+### 9.3 Performance Tests
+- Load testing with 1000+ concurrent users
+- Scraping performance (articles per minute)
+- Summary generation speed
+- Database query optimization
+
+### 9.4 Manual Testing
+- Cross-browser compatibility
+- Mobile responsiveness
+- User experience flows
+- Error handling and edge cases
+
+---
+
+## 10. Risks & Mitigations
+
+### 10.1 Technical Risks
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Website structure changes break scrapers | High | Implement robust error handling, regular monitoring, multiple backup scrapers |
+| API rate limits (OpenAI) | Medium | Implement caching, batch processing, use GPT-3.5 for non-critical insights |
+| HuggingFace model size/performance | Medium | Use distilled models, implement model caching, consider cloud GPU |
+| Database performance at scale | High | Implement indexing, caching layer, read replicas |
+
+### 10.2 Legal/Ethical Risks
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Copyright violations | High | Always attribute sources, link to originals, only provide summaries not full reprints |
+| Scraping policy violations | High | Respect robots.txt, implement rate limiting, add user agent identification |
+| Data privacy concerns | Medium | Implement privacy policy, minimal data collection, GDPR compliance |
+
+---
+
+## 11. Future Enhancements
+
+### 11.1 Potential Features
+- **Personalization**: ML-based article recommendations
+- **Mobile Apps**: Native iOS/Android applications
+- **Email Digests**: Daily/weekly email summaries
+- **Browser Extension**: Quick access to summaries while browsing
+- **Podcast Generation**: Text-to-speech for audio consumption
+- **Sentiment Analysis**: Track sentiment trends over time
+- **Multi-language Support**: Translate and summarize foreign articles
+- **API Marketplace**: Offer API access to third-party developers
+- **Collaboration Features**: Team workspaces and shared collections
+
+### 11.2 Advanced Analytics
+- Topic clustering and trend detection
+- Influence network analysis (which sources drive trends)
+- Predictive analytics (forecast trending topics)
+- Source reliability scoring
+
+---
+
+## 12. Appendices
+
+### 12.1 Glossary
+- **Scraping**: Automated extraction of data from websites
+- **Summarization**: AI technique to condense text while preserving key information
+- **Insights**: Contextual analysis and interpretation of information
+- **Flask**: Python web framework for building web applications
+- **HuggingFace**: Platform providing pre-trained ML models
+- **GPT**: Generative Pre-trained Transformer (OpenAI's language model)
+
+### 12.2 References
+- HuggingFace Documentation: https://huggingface.co/docs
+- OpenAI API Documentation: https://platform.openai.com/docs
+- Flask Documentation: https://flask.palletsprojects.com/
+- Scrapy Documentation: https://docs.scrapy.org/
+
+---
+
+**Document Version**: 1.0  
+**Last Updated**: September 30, 2025  
+**Status**: Draft for Review
