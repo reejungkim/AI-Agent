@@ -13,7 +13,6 @@ from langchain_openai import ChatOpenAI
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.prompts import PromptTemplate
 import pickle
 from pathlib import Path
 
@@ -266,10 +265,7 @@ def create_qa_chain_optimized(vectorstore, api_key: str, model_name: str, k: int
 Question: {question}
 Answer:"""
 
-        PROMPT = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
-        )
+        PROMPT = ChatPromptTemplate.from_template(prompt_template)
         
         # 검색기 설정 최적화
         retriever = vectorstore.as_retriever(
@@ -392,8 +388,8 @@ with col2:
                 
                 with st.spinner("답변 생성 중..."):
                     try:
-                        result = st.session_state.qa_chain({"query": prompt})
-                        answer = result["result"]
+                        result = st.session_state.qa_chain.invoke({"input": prompt})
+                        answer = result.get("answer", "")
                         
                         response_time = time.time() - start_time
                         
@@ -401,9 +397,10 @@ with col2:
                         st.caption(f"응답 시간: {response_time:.1f}초")
                         
                         # 소스 문서 (축약된 정보)
-                        if "source_documents" in result and result["source_documents"]:
+                        context_docs = result.get("context", [])
+                        if context_docs:
                             with st.expander("📚 참고 문서"):
-                                for i, doc in enumerate(result["source_documents"][:2]):
+                                for i, doc in enumerate(context_docs[:2]):
                                     page_info = ""
                                     if hasattr(doc, 'metadata') and 'page' in doc.metadata:
                                         page_info = f" (p.{doc.metadata['page'] + 1})"

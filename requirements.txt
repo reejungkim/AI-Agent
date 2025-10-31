@@ -1,13 +1,13 @@
-# Core Streamlit and LangChain
+# Core Streamlit and LangChain (modern API)
 streamlit>=1.28.0
-langchain>=0.1.0
-langchain-community>=0.0.20
+langchain>=0.2.11
+langchain-core>=0.2.11
+langchain-community>=0.2.11
+langchain-text-splitters>=0.2.0
 langchain-huggingface>=0.0.1
 langchain-groq>=0.0.1
 langchain-anthropic>=0.1.0
 langchain-openai>=0.1.0
-langchain-text-splitters>=0.0.1
-langchain-core >=0.1.0
 
 # Document processing
 pypdf>=3.0.0
