@@ -10,7 +10,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
-from langchain.chains import RetrievalQA
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
 from langchain.prompts import PromptTemplate
 import pickle
 from pathlib import Path
@@ -278,15 +280,19 @@ Answer:"""
             }
         )
         
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=retriever,
-            chain_type_kwargs={"prompt": PROMPT},
-            return_source_documents=True
-        )
-        
-        return qa_chain
+        # qa_chain = RetrievalQA.from_chain_type(
+        #     llm=llm,
+        #     chain_type="stuff",
+        #     retriever=retriever,
+        #     chain_type_kwargs={"prompt": PROMPT},
+        #     return_source_documents=True
+        # )
+        # return qa_chain
+
+        # Create the chains 
+        question_answer_chain = create_stuff_documents_chain(llm, PROMPT)
+        rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+        return rag_chain
     except Exception as e:
         st.error(f"QA 체인 생성 중 오류: {str(e)}")
         return None
