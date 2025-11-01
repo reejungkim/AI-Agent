@@ -265,7 +265,9 @@ def create_qa_chain_optimized(vectorstore, api_key: str, model_name: str, k: int
 Question: {question}
 Answer:"""
 
-        PROMPT = ChatPromptTemplate.from_template(prompt_template)
+        PROMPT = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{input}"), ])
         
         # 검색기 설정 최적화
         retriever = vectorstore.as_retriever(
