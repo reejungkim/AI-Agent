@@ -10,9 +10,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.output_parsers import StrOutputParser
 import pickle
 from pathlib import Path
 
@@ -259,22 +259,19 @@ def create_qa_chain_optimized(vectorstore, api_key: str, model_name: str, k: int
         else:
             raise ValueError(f"지원하지 않는 provider: {provider}")
         
-        # 간단한 프롬프트 (토큰 수 최소화)
-        prompt_template = """Context: {context}
-
-Question: {question}
-Answer:"""
-        system_prompt = (
+        # 프롬프트 템플릿 (LCEL 방식)
+        prompt_template = (
             "You are an assistant for question-answering tasks. "
             "Use the following pieces of retrieved context to answer "
             "the question. If you don't know the answer, say that you "
             "don't know. Use three sentences maximum and keep the "
-            "answer concise.\n\n{context}"
+            "answer concise.\n\n"
+            "Context: {context}\n\n"
+            "Question: {question}\n\n"
+            "Answer:"
         )
-
-        PROMPT = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "{input}"), ])
+        
+        PROMPT = ChatPromptTemplate.from_template(prompt_template)
         
         # 검색기 설정 최적화
         retriever = vectorstore.as_retriever(
@@ -285,18 +282,23 @@ Answer:"""
             }
         )
         
-        # qa_chain = RetrievalQA.from_chain_type(
-        #     llm=llm,
-        #     chain_type="stuff",
-        #     retriever=retriever,
-        #     chain_type_kwargs={"prompt": PROMPT},
-        #     return_source_documents=True
-        # )
-        # return qa_chain
-
-        # Create the chains 
-        question_answer_chain = create_stuff_documents_chain(llm, PROMPT)
-        rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+        # LCEL을 사용한 RAG 체인 생성
+        def format_docs(docs):
+            """문서들을 하나의 문자열로 포맷팅"""
+            return "\n\n".join(doc.page_content for doc in docs)
+        
+        format_docs_runnable = RunnableLambda(format_docs)
+        
+        rag_chain = (
+            {
+                "context": retriever | format_docs_runnable,
+                "question": RunnablePassthrough()
+            }
+            | PROMPT
+            | llm
+            | StrOutputParser()
+        )
+        
         return rag_chain
     except Exception as e:
         st.error(f"QA 체인 생성 중 오류: {str(e)}")
@@ -397,8 +399,11 @@ with col2:
                 
                 with st.spinner("답변 생성 중..."):
                     try:
-                        result = st.session_state.qa_chain.invoke({"input": prompt})
-                        answer = result.get("answer", "")
+                        # LCEL 체인 호출
+                        answer = st.session_state.qa_chain.invoke(prompt)
+                        
+                        # 소스 문서 가져오기 (참고용)
+                        source_docs = st.session_state.vectorstore.similarity_search(prompt, k=k_retrieval)
                         
                         response_time = time.time() - start_time
                         
@@ -406,10 +411,9 @@ with col2:
                         st.caption(f"응답 시간: {response_time:.1f}초")
                         
                         # 소스 문서 (축약된 정보)
-                        context_docs = result.get("context", [])
-                        if context_docs:
+                        if source_docs:
                             with st.expander("📚 참고 문서"):
-                                for i, doc in enumerate(context_docs[:2]):
+                                for i, doc in enumerate(source_docs[:2]):
                                     page_info = ""
                                     if hasattr(doc, 'metadata') and 'page' in doc.metadata:
                                         page_info = f" (p.{doc.metadata['page'] + 1})"
